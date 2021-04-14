@@ -1,0 +1,40 @@
+---
+# tasks file for hardening-publish-ami
+- name: UPDATE
+  command: sudo yum install -y aws-amitools-ec2 && export PATH=$PATH:/opt/aws/bin > /etc/profile.d/aws-amitools-ec2.sh && . /etc/profile.d/aws-amitools-ec2.sh
+
+- name: Install ami tools
+  yum:
+    name:
+      - aws-amitools-ec2
+
+- name: install cloud init
+  shell: |
+          cat > /tmp/cloudinit.sh << EOF
+          #!/bin/bash
+          if [ ! -d /root/.ssh ] ; then
+            mkdir -p /root/.ssh
+            chmod 700 /root/.ssh
+          fi
+          # Fetch public key using HTTP
+          TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+          && curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/public-keys/0/openssh-key > /tmp/my-key
+          if [ $? -eq 0 ] ; then
+                cat /tmp/my-key >> /root/.ssh/authorized_keys
+                chmod 700 /root/.ssh/authorized_keys
+                rm /tmp/my-key
+          fi
+          EOF
+          cd /tmp
+          chmod +x cloudinit.sh
+          sudo ./cloudinit.sh
+
+
+- name: Disable password-based remote logins for root
+  command: sudo sed -i -e '$aPermitRootLogin without-password' /etc/ssh/ssh_config
+
+- name: Disabl local root acces
+  command: sudo passwd -l root
+
+
+
